@@ -1,0 +1,87 @@
+/*{
+    "author": "Fredrik Ekelund",
+    "targets": ["omnioutliner"],
+    "type": "action",
+    "identifier": "com.mycompany.copy-to-md",
+    "version": "0.1",
+    "description": "Exporterar outline till Markdown med rubriker, numbering och notes",
+    "label": "Copy to Markdown",
+    "mediumLabel": "Copy to Markdown",
+    "longLabel": "Copy Outline to Markdown",
+    "paletteLabel": "Copy to MD",
+}*/
+(() => {
+    var action = new PlugIn.Action(function(selection) {
+        const counters = {};
+        const noteColumn = document.outline.noteColumn;
+        
+        function extractLinksFromText(textObj) {
+            if (!textObj || textObj.string.length === 0) {
+                return '';
+            }
+            
+            let result = '';
+            const runs = textObj.attributeRuns;
+            
+            runs.forEach(run => {
+                const style = run.style;
+                const link = style.link;
+                const text = run.string;
+                
+                if (link && link.toString().length > 0) {
+                    result += `[${text}](${link.toString()})`;
+                } else {
+                    result += text;
+                }
+            });
+            
+            return result;
+        }
+        
+        function itemToMarkdown(item, level = 1, parentNumber = '') {
+            let md = '';
+            const prefix = '#'.repeat(level);
+            
+            if (!counters[level]) {
+                counters[level] = 0;
+            }
+            counters[level]++;
+            
+            Object.keys(counters).forEach(key => {
+                if (parseInt(key) > level) {
+                    delete counters[key];
+                }
+            });
+            
+            let number = parentNumber ? `${parentNumber}.${counters[level]}` : `${counters[level]}`;
+            
+            md += `${prefix} ${number} ${item.topic}\n\n`;
+            
+            // Hämta note-värdet från note-kolumnen
+            const noteValue = item.valueForColumn(noteColumn);
+            if (noteValue && noteValue.string && noteValue.string.length > 0) {
+                const noteContent = extractLinksFromText(noteValue);
+                md += `${noteContent}\n\n`;
+            }
+            
+            item.children.forEach(child => {
+                md += itemToMarkdown(child, level + 1, number);
+            });
+            
+            return md;
+        }
+        
+        let markdown = '';
+        rootItem.children.forEach(item => {
+            markdown += itemToMarkdown(item, 1);
+        });
+        
+        Pasteboard.general.string = markdown;
+    });
+    
+    action.validate = function(selection){
+        return true;
+    };
+        
+    return action;
+})();
